@@ -1,0 +1,441 @@
+---
+title: "Veri Biliminde Sınıflandırma Algoritmaları"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Giriş
+
+
+Bir veri kümesinde tanımlı olan sınıflar arasında veriyi dağıtmaya *sınıflandırma* denir. Sınıflandırma algoritmaları, eğitim kümesinden dağılımın şeklini öğrenir ve sınıfı belli olmayan test verileri geldiğinde doğru şekilde sınıflandırmaya çalışır.^[1]^ Sınıflandırmada kullanılan algoritmalardan bazıları şunlardır:
+
+*  K En Yakın Komşu
+*  Çekirdek (Kernel) Regresyon
+*  Karar Ağaçları
+*  Destek Vektör Makinesi
+*  Naive Bayes Sınıflandırıcısı
+
+Bu çalışmada sınıflandırma yöntemi olarak *lojistik regresyon* ve *karar ağaçları* incelenecektir.
+
+## 2. Veri Kümesi
+İncelenecek veri kümesi, bir Portekiz bankacılık kurumunun telefon görüşmelerine dayalı olan doğrudan pazarlama kampanyaları ile ilgilidir.^[2]^ Çalışma, Mayıs 2008'den Kasım 2010'a kadar yapılan 41188 telefon görüşmesini içerir. Müşterilerin vadeli mevduatı kabul edip etmeyeceği bilgisine ulaşmak için çoğu kez aynı müşteriyle birden fazla kez irtibat kurma gereği doğmuştur.^[3]^ Veri kümesi dengesizdir, sadece 4640 görüşme (%11.26) başarıyla sonuçlanmıştır.
+
+```{r}
+data <- read.csv("/Users/meryemcamir/Desktop/dataset/bank-additional-full.csv", header = TRUE, sep = ";")
+```
+
+İlk olarak masaüstündeki "dataset" klasöründe bulunan `bank-additional-full.csv` isimli dosya programa okutulur ve oluşan veri çerçevesi **"data"** adındaki değişkene atanır. `header = TRUE` veri çerçevesindeki ilk satırın, sütunların adıyla oluşturulan bir başlık olmasını sağlar.
+
+    30;blue-collar;married;basic.9y;no;yes;no;cellular;may;fri;487;2;999;0;nonexistent;-1.8;92.893;-46.2;1.313;5099.1;no
+
+Veri kümesinden alınan yukarıdaki örnekte görüldüğü üzere dosyanın her bir satırındaki değerler "**;**" karakteri ile birbirinden ayrılmıştır.<br>
+`sep = ";"` ile ayrım yerlerinin program tarafından tanınması sağlanır.
+
+Aşağıda `head` fonksiyonu aracılığıyla veri çerçevesinin baştaki satırlarından oluşturulmuş bir önizleme görülmektedir:
+
+```{r}
+head(data)
+```
+
+### 2.1. Değişkenler
+***Müşteri Bilgileri***
+<ol>
+<li><b>age:</b> Müşterilerin yaşlarından oluşmuştur. 17 ile 98 arasında değerler alır ve numerik tiptedir.</li><br>
+<li><b>job:</b> Müşterilerin mesleklerini belirtir.<br>
+Kategoriler: 'admin.', 'blue-collar', 'entrepreneur', 'housemaid', 'management', 'retired', 'selfemployed', 'services', 'student', 'technician', 'unemployed', 'unknown'.</li><br>
+<li><b>marital:</b> Müşterilerin medeni halini gösterir.<br>
+Kategoriler: 'divorced'<sup>\*</sup>, 'married', 'single', 'unknown'.</li><br>
+<li><b>education:</b> Müşterilerin eğitim durumlarını gösterir.<br> 
+Kategoriler: 'basic.4y', 'basic.6y', 'basic.9y', 'high.school', 'illiterate', 'professional.course', 'university.degree', 'unknown'.</li><br>
+<li><b>default:</b> Müşterinin kredi borcu olup olmadığını gösterir.<br>
+Kategoriler: 'no', 'yes', 'unknown'.</li><br>
+
+<li><b>housing:</b> Müşterinin konut kredisi sahibi olup olmadığını belirtir.<br>
+Kategoriler: 'no', 'yes', 'unknown'.</li><br>
+
+<li><b>loan:</b> Müşterinin bireysel kredi kullanıp kullanmadığını gösterir.<br>
+Kategoriler: 'no', 'yes', 'unknown'.</li>
+</ol><br>
+
+***Son Telefon Görüşmesine İlişkin Bilgiler***<br>
+<ol start="8">
+<li><b>contact:</b> Müşteri ile kurulan iletişimin cep telefonu üzerinden mi yoksa karasal hat üzerinden mi gerçekleştiğini gösterir.<br>
+Kategoriler: 'cellular', 'telephone'.</li><br>
+<li><b>month:</b> Müşteri ile son iletişime geçilen ayı gösterir.<br>
+Kategoriler: 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'.</li><br>
+<li><b>day_of_week:</b> Müşteri ile son iletişime geçilen hafta içi gününü belirtir.<br>
+Kategoriler: 'mon', 'tue', 'wed', 'thu', 'fri'.</li><br>
+<li><b>duration:</b> Son iletişimin süresini saniye cinsinden gösterir. 0 ile 4918 arasında değerler alır. Numerik tipte bir değişkendir.</li></ol><br>
+
+***Diğer Özellikler***<br>
+<ol start="12">
+<li><b>campaign:</b> Bu kampanya süresince müşteri ile kurulan irtibat sayısını gösterir, numerik tiptedir. 1 ile 56 arasında değerler alır.</li><br>
+<li><b>pdays:</b> Müşteri ile bir önceki kampanya esnasındaki son görüşmeden itibaren geçen gün sayısını gösterir. Numeriktir. Müşteri ile daha öncesinde herhangi bir iletişime geçilmemişse *999* değerini alır.</li><br>
+<li><b>previous:</b> Bu kampanyadan önce müşteri ile yapılan görüşme sayısını belirtir. Numeriktir ve 0 ile 7 arasında değişir.</li><br>
+<li><b>poutcome:</b> Önceki kampanyanın başarıya ulaşıp ulaşmadığını gösterir.<br>
+Kategoriler: 'failure', 'nonexistent', 'success'.</li></ol><br>
+
+***Sosyal ve Ekonomik Özellikler***<br>
+<ol start="16">
+<li><b>emp.var.rate:</b> İstihdam varyasyon oranını gösterir ve numeriktir.</li><br>
+<li><b>cons.price.idx:</b> Aylık tüketici fiyatları endeksini (TÜFE) gösterir. Numeriktir.</li><br> 
+<li><b>cons.conf.idx:</b> Aylık tüketici güven endeksini gösterir. Numeriktir.</li><br>
+<li><b>euribor3m:</b> AB'deki bankalar arası geriye dönük üç aylık faiz oranının günlük ortalama karşılığını belirtir. Numeriktir.</li><br>
+<li><b>nr.employed:</b> Müşterinin iş yerindeki çalışan sayısını (üç aylık gösterge) belirtir. Numeriktir.</li></ol><br>
+
+***Sonuç Değişkeni***<br>
+<ol start="21">
+<li><b>y:</b> Müşteri vadeli mevduat açtırmış mı?<br>
+Kategoriler: 'yes', 'no'.</li></ol><br>
+<sup>\*</sup> *'divorced' kategorisinin içerisinde hem boşanmış olanlar hem de eşleri vefat edenler yer almaktadır.*
+
+## 3. Lojistik Regresyon
+### 3.1. Giriş
+Regresyon analizi, herhangi bir değişkenin bir veya birden fazla değişkenle arasındaki ilişkiyi ölçmek için kullanılan analiz yöntemidir.
+
+Bir vakada iki ana değişken vardır: bağımlı değişken ve bağımsız değişken. Bağımlı değişken sayısı tektir ancak bağımsız değişken sayısı birden fazla olabilir.
+
+**Bağımsız değişken** (açıklayıcı değişken) bağımlı değişkeni etkilediği düşünülen sebep değişkenidir. 
+
+**Bağımlı değişken** (cevap değişkeni) vakadaki bağımsız değişkenlerden etkilenen, test edilen ve ölçülen değişkendir. 
+
+*Burada incelenen veri kümesindeki ilk yirmi değişken bağımsız değişkenlerdir. Yirmi birinci değişken olan $y$, bağımlı değişkendir. Amaç bağımsız değişkenlerin ışığı altında $y$ değişkeninin yanıtına ulaşmaktır.*
+
+Lineer regresyon, veri kümesinde normal dağılım ister. Ayrıca hem bağımlı değişken hem de bağımsız değişkenler nicel olmalıdır. Örneğin, yaş ile kan basıncı arasında bir ilişki saptanacaksa hem yaş hem de kan basıncı sayısal olarak belirtilmelidir.^[4]^ Ancak gerçek hayatta çoğu zaman nitel değişkenlerle karşılaşılır.
+
+Lojistik regresyon ise cevap değişkeninin kategorik ve çoklu; bağımsız değişkenlerin numerik veya kategorik olabildiği bir regresyon çeşididir. Bağımlı değişkenin kategori sayısına göre uygulanacak yöntem farklıdır. 
+
+Binomial     | Multinomial        | Ordinal
+:----------: | :----------------: | :-----------------------:
+2 kategori | 2+ kategori<br>*sırasız*| 2+ kategori<br>*sıralı* 
+etkili - etkisiz<br>evet - hayır<br>iyileşti - iyileşmedi  | çalışıyor - çalışmıyor - emekli | çok etkili - orta derecede etkili - az etkili
+
+Lojistik regresyon, 1958'de İngiliz istatistikçi David Cox tarafından geliştirilmiştir. Tıp, sosyal bilimler, mühendislik, makine öğrenimi gibi birçok alanda lojistik regresyondan yararlanılır. Örneğin, yaralılarda ölüm oranının tahmin edilmesinde kullanılan "Travma ve Yaralanma Şiddeti Skoru" lojistik regresyon kullanılarak geliştirilmiştir. Bir seçmenin yaşı, gelir düzeyi, cinsiyeti, ikamet ettiği yer, önceki seçimlerdeki oyları gibi kategorilere bakılarak bir sonraki seçimde sağ kesime mi yoksa sol kesime mi yönelik oy kullanacağının tahmin edilmesi de bir başka kullanım alanı örneğidir. Pazarlama alanındaki kullanımına ise bir müşterinin bir ürünü veya hizmeti satın alacağının ya da üyeliğini durduracağının öngörülmesi örnek olarak verilebilir.
+
+### 3.2. Matematiksel Açıklama
+Standart lojistik fonksiyon $t\in\mathbb{R}$, &nbsp; $f(t)\in(0,1)$ için
+
+$$f(t) = \frac{e^t}{e^t + 1} = \frac{1}{1 + e^{-t}}$$ 
+
+şeklinde tanımlanır.
+
+![](/users/meryemcamir/desktop/dataset/function.png)
+
+Kolaylık açısından $t$'nin tek bir bağımsız değişkene ait lineer bir fonksiyon olduğu kabul edilsin: 
+
+$$t = \beta_0 + \beta^Tx \mbox{ .} $$
+
+Artık lojistik fonksiyon
+
+$$p(x) = \frac{e^{\beta_0 + \beta^Tx}}{1 + e^{\beta_0 + \beta^Tx}} \textrm{ veya } \mbox{ } p(x) = \frac{1}{1 + e^{-(\beta_0 + \beta^Tx)}}$$
+
+şeklinde yazılabilir.
+
+Lojistik regresyon modeli, $K$ adet sınıfın toplamları bire eşit olan $(0,1)$ aralığındaki sonsal olasılıklarını $x$ 'e bağlı lineer fonksiyonlar aracılığıyla modelleme isteğinden doğmuştur.^[5]^
+
+Eğer iki adet sınıf $(K=2)$ varsa sonsal olasılık:
+
+$$Pr(G=1 | X=x) = \frac{e^{\beta_0 + \beta^Tx}}{1 + e^{\beta_0 + \beta^Tx}} \mbox{ ,}$$
+
+$$Pr(G=2 | X=x) = \frac{1}{1 + e^{\beta_0 + \beta^Tx}} \mbox{ .}$$
+
+Bu iki denklemin oranının doğal logaritması alınırsa
+
+$$ln(\frac{p}{1-p}) = ln(\frac{Pr(G=1 | X=x)}{Pr(G=2 | X=x)}) = \beta_0 + \beta^Tx$$
+
+lineer denklemi elde edilir.
+
+Burada $\frac{p}{1-p}$ **odds** olarak adlandırılır. Yani bir şeyin başarılı olması veya meydana gelmesi olasılığının meydana gelmeme olasılığına oranıdır. Odds'un logaritmasının alınmasıyla oluşturulan $ln(\frac{p}{1-p})$ ise **lojit** olarak isimlendirilir.^[6]^
+
+---
+
+Lojistik regresyon modelleri genellikle $G$'nin $X$'e bağlı koşullu olasılığı ( $Pr(G|X)$ ) kullanılarak maksimum olabilirlik *(maximum likelihood)* yöntemi ile uygun hale getirilir. 
+
+$p_k(x_i;\theta) = Pr(G = k | X = x_i;\theta)$ iken $N$ adet gözlem için olabilirlik fonksiyonunun logaritması:
+
+$$\ell(\theta) = \sum_{i=1}^Nlogp_{g_i}(x_i;\theta)\mbox{ .}$$
+
+Denklemlerde sade bir görüntü oluşturmak açısından sınıf sayısı 2 olarak kabul edilsin. 
+
+$g_i = 1$ iken $y_i = 1$, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$p_1(x;\theta) = p(x;\theta) \mbox{ ,}$ 
+
+$g_i = 2$ iken $y_i = 0$, &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$p_2(x;\theta) = 1 - p(x;\theta)$ olsun. Bu durumda olabilirlik fonksiyonunun logaritması
+
+\begin{align*}
+\ell(\beta) &= \sum_{i=1}^N\big\{y_i\mbox{ }log\mbox{ }p(x_i;\beta) + (1-y_i)\mbox{ }log\mbox{ }(1-p(x_i;\beta))\big\}
+\end{align*}
+
+şeklinde yazılabilir.^[5]^ Bu fonksiyonun maksimize edilmesi, parametreye göre türevinin alınıp sıfıra eşitlenmesiyle gerçekleşir. Maksimizasyon sonucunda en uygun modele ulaşılır.
+
+### 3.3. Model Oluşturma
+
+```{r}
+egit <- read.csv("/Users/meryemcamir/Desktop/dataset/bank-additional.csv", header=TRUE, sep=";")
+```
+
+Modelleme için kullanılacak olan bu veri kümesi, **"bank-additional-full.csv"** isimli kümedeki örneklerin rastgele seçilmesiyle oluşturulmuştur ve örneklerin %10'unu içerir.^[3]^ 
+
+Analize başlamadan önce veri kümesinde eksik değerler olup olmadığı kontrol edilmelidir. Eksik bir değere sahip gözlem varsa oluşturulacak modelin doğruluğu açısından ilgili satır, veri kümesinden çıkarılacaktır.
+
+```{r}
+#Veri kümesinde eksik değer (NA) var mı? Varsa true, yoksa false döndürür.
+
+anyNA(egit)
+```
+
+```{r message=FALSE, warning=FALSE}
+#Eksik değerlerin görsel olarak incelenmesi
+
+library(Amelia)
+missmap(egit, main = "Eksik Degerler - Gozlenen Degerler")
+```
+
+Yukarıda görüldüğü üzere veri kümesinde herhangi bir eksik değer yoktur. Artık model oluşturulabilir.
+
+Genelleştirilmiş lineer modeller oluşturmak için `glm` fonksiyonu kullanılır. İncelenen verideki sonuç değişkeni iki seviyeli (y : 'no', 'yes') olduğu için `glm` fonksiyonu `binomial(link='logit')` ailesiyle çağrılır. `summary()` ile modele ilişkin sonuçlar görüntülenir.
+
+Aşağıda veri kümesinde bulunan bütün açıklayıcı değişkenlerin sonuç değişkeniyle ilişkisini gösteren bir model oluşturulmuştur.
+
+```{r}
+model <- glm(y ~ ., family = binomial(link = "logit"), data = egit)
+summary(model)
+```
+
+### 3.4. Model Sonuçlarının Yorumlanması
+
+Sapma *(deviance)* modelin ne kadar iyi uyduğunun bir ölçüsüdür. Yüksek sayılar başarısız uyuma işaret eder. **Null deviance** sonuç değişkeninin sadece kesen içeren bir model tarafından ne kadar iyi tahmin edilebildiğini gösterir. Modele değişkenler eklenmesiyle bu sayı düşer ve model daha uygun hale gelir.
+
+**AIC** birden fazla modelin olduğu durumlarda bir modelin diğerlerine göre üstünlüğünü belirlemeye yardımcı olur. Düşük AIC'ye sahip modeller daha iyidir.
+
+**Fisher puanlama algoritması** Newton–Raphson metodu üzerinden oluşturulmuş bir formdur ve maksimum olabilirlik problemlerinin sayısal çözümü için kullanılır.^[9]^
+
+
+**Std. Error** ile güven aralıkları belirlenebilir.
+$$\mbox{Güven Aralığı} = \bar{X} \pm Z^*\frac{\sigma}{\sqrt{n}}$$
+
+$\bar{X}:$ Nokta tahminidir. *"Estimate"* kolonundaki değerler değişkenlerin katsayılarının nokta tahminlerini verir.<br>
+$Z^*:$ Talep edilen güven aralığı için Z değeridir.<br>
+$\frac{\sigma}{\sqrt{n}}:$ Standart hatadır.
+
+Örneğin, *age* değişkeninin katsayısı için %95 güven aralığı hesaplansın. %95 güven aralığı için $Z^*=1.96\approx2$ kabul edilebilir. $0.008668 \pm 2(0.008137)$ işlemi sonucunda *age* değişkeninin katsayısı için %95 güven aralığı $(-0.0076\mbox{ , } 0.0249)$ olarak bulunur.
+
+* Yaşın müşterilerin kararı (evet/hayır) üzerindeki etkisi yok denecek kadar azdır. Yaştaki 1 birimlik artış lojiti 0.0087 artırır.
+
+
+* Mesleğin sonuç üzerindeki etkisi incelenirken *"admin"* referans olarak belirlenmiştir. Meslek değişkeninin müşterilerin kararı üzerindeki etkisi oldukça zayıftır. İstatistiksel olarak sadece serbest meslek sahipleri *(jobself-employed)* önemli sayılabilir. Referans grubu ile kıyaslandığında temizlik görevlileri, hizmet sektöründekiler, teknisyenler ve işsizler sonuç üzerinde pozitif etkiye; diğer meslek dalları ise negatif etkiye sahiptir.
+
+
+* Medeni durumun sonuç değişkeni üzerindeki etkisi incelenirken *"divorced"* referans olarak belirlenmiştir. Medeni durum istatistiksel olarak önemli değildir. Evliler, bekarlar ve medeni hali bilinmeyenler boşanmış olanlara göre zayıf derecede pozitif etkiye sahiptir. 
+
+
+* Eğitimin müşteri cevabı üzerindeki etkisine bakıldığında *"basic.4y"* referans olarak kabul edilmiştir. Diğer tüm koşullar eşitken okur yazar olmayan kesimin hayır cevabı verme olasılığı, ilkokul dördüncü sınıf mezunlarına göre daha fazladır *(katsayı: -11.44)*. Diğer eğitim seviyeleri, dört senelik eğitim seviyesine göre zayıf pozitif etkiye sahiptir. Ancak eğitim istatistiksel açıdan önemli bir değişken değildir.
+
+
+* Kredi borcunun müşteri kararı üzerindeki etkisi analiz edilirken *"no"* kategorisi referans olarak belirlenmiştir.Kredi borcu olanların kredi borcu olmayanlara göre vadeli mevduatı reddetme olasılığı daha fazladır. İstatistiki olarak önemli değildir.
+
+
+* Konut kredisi sahipliğinin sonuç üzerindeki etkisine bakılırken konut kredisi sahibi olmama *("no")* durumu referans olarak belirlenmiştir. Konut kredisi sahibi olanların vadeli mevduatı kabul etmeme olasılığı konut kredisi sahibi olmayanlara göre eşit koşullar altında zayıf bir etkiyle daha fazladır. İstatistiksel açıdan önemli değildir.
+
+
+* Bireysel kredi kullanımının sonuç üzerindeki etkisi incelenirken bireysel kredi kullanmama durumu referans olarak belirlenmiştir. Bireysel kredi kullanan müşterilerin hayır cevabı verme olasılığı kredi kullanmayan müşterilere göre zayıf bir etkiyle daha fazladır. Sonuçlarda *"loanunknown"* etiketine ait değerlerde `NA` yazısı yer almaktadır. `Coefficients: (1 not defined because of singularities)` uyarısı ile birlikte buradan, açıklayıcı değişkenlerden birinin diğer değişkenlerin lineer kombinasyonuyla ifade edilebileceği sonucu çıkarılabilir. Başka bir ifadeyle değişkenler arasında lineerlik mevcuttur.
+
+
+* İletişim çeşidinin sonuç üzerindeki etkisinin kesinliği istatistiksel açıdan kuvvetlidir. Cep telefonu üzerinden yapılan görüşmeler referans alınmıştır. Referans ile karşılaştırıldığında karasal hat üzerinden yapılan görüşmelerde yanıtın olumsuz olma ihtimali daha fazladır.
+
+
+* Ayların etkisi incelenirken nisan referans olarak seçilmiştir. Mart ayı hakkındaki sonuçların kesinliği oldukça fazladır ve referans ile karşılaştırıldığında sonuç değişkenine etkisi de diğer aylara göre daha fazladır. Ayrıca mart ayı referansa göre pozitif etkilidir.
+
+
+* Günlerin etkisine bakıldığında cuma referans olarak seçilmiştir. Pazartesi, salı, çarşamba ve perşembe günleri cuma gününe göre sonuç üzerinde zayıf pozitif bir etkiye sahiptir. Gün değişkeni istatistiksel açıdan önemli sayılmaz.
+
+
+* Müşteri ile yapılan telefon konuşması süresinin sonuç üzerindeki etkisinin kesinliği epey yüksektir. Süredeki 1 saniyelik artış lojiti 0.00526 artırır.
+
+
+* Kampanya süresince müşteri ile kurulan iletişim sayısının artışı müşterinin evet deme olasılığını zayıf olarak da olsa olumsuz yönde etkilemektedir. İstatistiksel açıdan *"campaign"* önemlidir.
+
+
+* Müşteri ile bir önceki kampanyadaki en son görüşmenin üzerinden geçen gün sayısının sonuca etkisi yok denecek kadar azdır. Günün 1 artması lojiti 0.0004959 düşürür. İstatistiksel açıdan pek önemli değildir.
+
+
+* Kampanyadan önce müşteriyle yapılan toplam görüşme sayısının sayıca fazla olması sonuç üzerinde zayıf pozitif bir etki yaratır. Bu değişken de istatistiksel açıdan pek önemli değildir.
+
+
+* Önceki kampanyanın başarısızlığa uğraması referans kabul edilmiştir. Buna göre diğer koşulların eşit olması durumunda bir önceki kampanyaya olumlu katılım gösteren kişilerin olumsuz katılımcılara göre "evet" deme olasılığı daha yüksektir. Bir önceki kampanyaya gösterdiği eğilim hakkında bilgi sahibi olunmayan müşteriler de olumsuz yanıt verenlere göre sonuç üzerinde pozitif etkiye sahiptir. Bu değişkenin sonuç üzerindeki etkisinin kesinliği istatistiksel olarak kuvvetlidir.
+
+
+* İstihdam varyasyon oranındaki artış sonucu negatif etkiler. İstatistiksel olarak önemli bir değişkendir.
+
+
+* Tüketici fiyatları endeksinin artışı sonucu pozitif etkiler. Etkisinin kesinliği istatistiksel olarak kuvvetlidir.
+
+
+* Tüketici güven ekdeksinin artışı sonuç üzerinde zayıf pozitif bir etki yaratır. İstatistiksel olarak önemli bir değişkendir.
+
+
+* Hesaplanan faiz oranının yükselmesi sonuç üzerinde zayıf negatif bir etki yaratır. İstatistiksel olarak önemli bir değişken değildir.
+
+
+* Çalışan sayısındaki artış sonuç üzerinde oldukça zayıf pozitif etkiye sahiptir. İstatistiksel olarak önemli değildir. 
+
+---
+
+İstatistiksel olarak anlamlı değişkenler kullanılarak başka bir model oluşturulsun:
+
+```{r}
+model2 <- glm(y ~ contact + month + duration + campaign +
+          poutcome + emp.var.rate + cons.price.idx + cons.conf.idx, 
+          family = binomial(link = "logit"), data = egit)
+summary(model2)
+```
+
+Yukarıda görüldüğü üzere bu modelden istatistiki açıdan daha kesin sonuçlar elde edilmiştir. Değişkenlere ait hesaplanmayan değerler de yoktur. Ayrıca AIC değerinin daha düşük olması ve serbestlik derecesindeki 17 kayıpla sapmanın 1225.8 azaltılması da bu modelin önceki modele göre daha uygun bir model olduğunu gösterir. 
+
+### 3.5. Model Ne Kadar Başarılı?
+
+Modelin başarısını test etmek için ilk olarak test kümesi oluşturulmalıdır. Bu işlem, büyük veri kümesinden eğitim için kullanılan küçük veri kümesinin çıkarılmasıyla yapılacaktır.`dplyr` kütüphanesinde bulunan `setdiff(data, egit)`, "data" kümesinde görünüp "egit" kümesinde görünmeyen satırları çalıştırır. Böylece *"test"* adında yeni bir veri kümesi oluşturulur.
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+test <- setdiff(data,egit)
+pdata <- predict(model2, newdata = test, type = "response")
+head(pdata)
+```
+
+Görüldüğü üzere buradaki `predict()` kurulan modele göre "test" kümesindeki *y* değerlerinin olasılıklarını (0,1) aralığında olacak şekilde tahmin eder. *y* değişkeni, sıfıra karşılık gelen "no" ve bire karşılık gelen "yes" sınıflarına sahip olduğu için tahmin edilen bu sayısal değerler de iki sınıfta toplanmalıdır. Bu yüzden olasılığı 0.5'ten küçük olanlar "no", 0.5'ten büyük olanlar ise "yes" olarak kategorilendirilecektir. Böylece gerçek sınıflar ile tahmin edilen sınıflar arasındaki örtüşme kontrol edilebilir. 
+
+Bu örtüşme **hata matrisi** aracılığıyla incelenebilir.
+
+```{r message=FALSE, warning=FALSE}
+library(caret)
+confusionMatrix(data = as.vector(ifelse(pdata > 0.5,"yes","no")), reference = test$y, positive = "yes")
+```
+
+Hata matrisi gerçek değerler ile tahmini değerler arasında oluşturulmuş 2x2 boyutlarında bir matristir. Dört bileşenden oluşur:^[10]^
+
+*  **Doğru negatif (DN):** Gerçek karşılığı "hayır" olup "hayır" olarak tahmin edilenlerdir. 31943 doğru negatif vardır.
+*  **Doğru pozitif (DP):** Gerçek karşılığı "evet" olup "evet" olarak tahmin edilenlerdir. 1782 doğru pozitif vardır.
+*  **Yanlış negatif (YN):** Gerçek karşılığı "evet" olmasına rağmen "hayır" olarak tahmin edilen 2406 değer vardır.
+*  **Yanlış pozitif (YP):** Gerçek karşılığı "hayır" olmasına rağmen "evet" olarak hesaplanan 926 değer vardır.
+
+37057 durumun 34349 tanesi “hayır”, 2708 tanesi “evet” olarak tahmin edilmiştir. Ancak aslında 32869 tane “hayır”, 4188 tane “evet” cevabı bulunmaktadır. Ayrıca 37057 durumun 33725 tanesi isabetli tahmindir.
+
+Sonuçlar incelendiğinde dengesiz bir dağılım olduğu görülür. "Evet" olduğu halde yanlış tahmin edilen "evet" sayısı doğru tahmin edilenlerden fazladır (2406 > 1782). Daha dengeli bir dağılım için olasılığı 0.25'ten büyük olanlar "yes", küçük olanlar ise "no" olarak sınıflandırılsın.
+
+```{r}
+confusionMatrix(data = as.vector(ifelse(pdata > 0.25,"yes","no")), reference = test$y, positive = "yes")
+```
+
+`confusionMatrix()` işlemi sonucunda ortaya çıkan önemli bazı terimler şunlardır:
+
+*  **Accuracy:** Sınıflayıcının doğruluk oranıdır. $\frac{DP + DN}{Toplam}$ ile hesaplanır.
+
+*  **Kappa:** Cohen'in Kappa katsayısı iki değerleyici arasındaki uyumun güvenilirliğini ölçer. En büyük değer olan 1'e yaklaştıkça iki değerleyici arasındaki uyuşma artar.  
+
+*  **Sensitivity:** Sınıflayıcının hassasiyetlik oranını belirtir. Pozitif değerlerin sınıflayıcı tarafından ne kadar iyi tanınabildiğini gösterir. $\frac{DP}{Pozitif} = \frac{DP}{YN + DP}$ ile hesaplanır.
+
+*  **Specificity:** Negatif örneklerin sınıflayıcı tarafından ne kadar iyi tanınabildiğini gösterir. $\frac{DN}{Negatif} = \frac{DN}{DN + YP}$ ile hesaplanır.
+
+*  **Pos Pred Value:** Gerçek pozitiflerin bütün pozitif tahmin edilenlere oranıdır.
+
+*  **Neg Pred Value:** Gerçek negatiflerin bütün negatif tahmin edilenlere oranıdır.
+
+*  **Prevalence:** Pozitif örneklerin yaygınlığını gösterir, gerçek pozitif örneklerin toplam örnek sayısına oranıdır. Yani test kümesindeki "evet" oranını belirtir.
+
+*  **Detection Rate:** Doğru pozitif tespitlerin toplam örnek sayısına oranıdır. $\frac{DP}{DP + DN + YN + YP}$ ile hesaplanır.
+
+*  **Detection Prevalence:** Pozitif olarak tahmin edilenlerin toplam örnek sayısına oranıdır. $\frac{DP + YP}{DP + DN + YN + YP}$ ile hesaplanır.
+
+*  **Balanced Accuracy:** $\frac{\textit{sensitivity } + \textit{ specificity}}{2}$ formülü ile hesaplanır. Veri kümesinin dengesiz olduğu durumlarda dengelenmiş doğruluğu dikkate almak daha iyi olabilir.^[11]^
+
+Buna göre yukarıdaki iki hata matrisi sonucu karşılaştırıldığında olasılığı 0.25'ten büyük olanları "yes" olarak kategorilendirmenin bu örnekte daha uygun olacağı söylenebilir.
+
+## 4. Karar Ağaçları
+### 4.1. Giriş
+
+
+Karar ağaçları anlaşılmasının ve yorumlanmasının kolay olması, veri tabanları ile entegrasyonunun kolaylığı, güvenilirliklerinin iyi olması gibi sebeplerden dolayı popüler tekniklerden biridir.^[7]^
+
+Karar ağaçları, veri madenciliğinde hem sınıflandırmada hem de regresyonda kullanılabilecek bir tahmin yöntemi iken yöneylem araştırmalarında hiyerarşik bir karar modelini ve sonuçlarını ifade eder. Bir karar ağacı sınıflandırma görevlerinde kullanılıyorsa *sınıflandırma ağacı*, regresyon görevlerinde kullanılıyorsa *regresyon ağacı* adını alır.^[8]^ Bu çalışmada sınıflandırma ağaçlarından bahsedilecektir.
+
+Sınıflandırma ağaçları bir nesneyi veya durumu niteliklerine göre önceden tanımlanmış olan sınıflara ayırmak için kullanılır. Örneğin, bu çalışmada müşterilerin kararlarını yaş, meslek, konuşma süresi vb. özellikler yardımıyla evet/hayır sınıflarında toplamak için sınıflandırma ağaçları kullanılacaktır.
+
+Bir sınıflandırma ağacı iç düğümlerden *(test düğümleri)* ve yapraklardan *(karar düğümleri)* oluşur. Her bir iç düğüm, bağımsız bir değişkeni temsil eder ve örnek uzayı iki veya daha fazla alt uzaya böler. Her bir yaprak sonuç çıktısının değerini gösterir.^[8]^ 
+
+Karar ağacı tekniği kullanılarak sınıflandırma, *öğrenme* ve *sınıflama* olmak üzere iki basamaklı bir işlemdir. Ağacın öğrenilmesi sırasında üzerinde eğitim yapılan kümenin çeşitli özelliklere göre alt kümelere bölünmesi öz yineli olarak devam eder ve tekrarlama işleminin tahmin üzerinde bir etkisi kalmayana dek sürer. Bu işlem *öz yineli parçalama* olarak isimlendirilir. Öğrenilen model, sınıflama kuralları veya karar ağacı olarak gösterilir. Sınıflama aşamasında ise test kümesi, belirlenen sınıflama kuralarının veya karar ağacının doğruluğunun tespiti için kullanılır. Kabul edilebilir oranda doğruluk mevcutsa eğitimde belirlenen kurallar yeni verilerin sınıflandırılması amacıyla kullanılabilir.
+
+### 4.2. Model Oluşturma
+
+Karar ağacı oluşturmak için `party` kütüphanesindeki `ctree()` kullanılabilir.. Oluşan grafik oldukça büyük olduğu için düzgün görüntülenebilmesi amacıyla boyutları ayarlanmış olan `.png` uzantılı dosyaya çizdirilmiştir.
+ 
+```{r results = 'hide', message=FALSE, warning=FALSE}
+library(party)
+claTree <- ctree(y ~ ., data = egit) 
+png("clatree.png", res=80, height=1000, width=2000) 
+plot(claTree, type = "simple") 
+dev.off()
+```
+
+![](/Users/meryemcamir/clatree.png)
+
+### 4.3. Model Sonuçlarının Yorumlanması
+
+*  Müşteri ile kurulan iletişimin süresi 616 saniyenin üzerine çıktığında sonucun başarılı olma olasılığı 0.52'dir.
+
+*  616 saniyeden kısa süren konuşmalarda müşterinin iş yerindeki çalışan sayısı 5076.2'den fazlaysa ve müşteri mart ya da ekim aylarında aranmışsa sonucun başarılı olma ihtimali 0.54'tür. Nisan ayında yapılan görüşmelerde ise sonuç büyük olasılıkla (0.9) olumsuz olmaktadır.
+
+*  Çalışan sayısının 5076.2'den fazla olduğu; görüşmenin 310 saniye veya daha kısa sürdüğü; iletişim kurulan ayın ağustos, aralık, temmuz, haziran, mayıs veya kasım olduğu; önceki kampanyanın başarıya ulaşıp ulaşmadığının bilinmediği durumlarda sonuç olumsuz olmuştur. Modele katılan 4119 örnekten 2326 tanesi bu kategoriye girmektedir.   
+
+### 4.4. Model Ne Kadar Başarılı?
+
+`predict()` ile `claTree` isimli modele uygun olarak "test" kümesindeki bağımlı değişken olan *y*'nin sınıfları tahmin edilir ve "hesaplanan" isimli değişkene atanır. `confusionMatrix()`, sonuç değişkeninin hesaplanan ve gerçek karşılıklarının sayıca karşılaştırılması için bir hata matrisi oluşturur. `positive = "yes"` sonuç değişkenindeki *"yes"* sınıfının yapılacak işlemlerde pozitif kısım olarak hesaplatılmasını sağlatır.   
+
+```{r message=FALSE, warning=FALSE}
+hesaplanan <- predict(claTree, newdata  = test)
+confusionMatrix(hesaplanan, test$y, positive = "yes")
+```
+
+*  30284 **doğru negatif** vardır.
+*  3034 **doğru pozitif** vardır.
+*  1154 **yanlış negatif** vardır.
+*  2585 **yanlış pozitif** vardır.
+
+Modele göre 37057 durumun 31438 tanesi "hayır", 5619 tanesi "evet" olarak tahmin edilmiştir. Gerçekte 32869 tane "hayır", 4188 tane "evet" cevabı bulunmaktadır.
+
+## 5. Sonuç
+
+Portekiz bankacılık kurumunun pazarlama kampanyalarında müşteriler, vadeli mevduatı seçip seçmeme konusunda sınıflandırılmak istenmiştir. Bunun için lojistik regresyon ve karar ağaçları yöntemleri kullanılmıştır. Doğruluk, dengelenmiş doğruluk, duyarlık gibi sonuçlar karşılaştırıldığında her iki modelin de benzer sonuçlar sergilediği görülmektedir. Modelin, oluşan görsele bakılarak kolay yorumlanabilirliği konusunda karar ağaçları öne çıkmaktadır. Regresyonda ise değişkenlerdeki her bir sınıfın etkisi detaylı olarak gözlenebilmektedir. 
+
+## Kaynakça
+
+1.  Alpaydin, Ethem. (2010). *Introduction to machine learning *(s.9)*.* MIT Press.
+
+2.  Moro, S., Cortez, P. & Rita, P. (2014). *A data-driven approach to predict the success of bank         telemarketing.* Decision Support Systems, Elsevier, 62:22-31
+
+3.  Dua, D. and Karra Taniskidou, E. (2017). UCI Machine Learning Repository [http<!--  -->://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of Information and Computer Science.
+
+4.  Sümbüloğlu, K. (2014). *Lojistik regresyon analizi.* http<!-- -->://78.189.53.61/-      /bs/ess/k_sumbuloglu.pdf
+
+5.  Hastie, T., Tibshirani, R. & Friedman, J. (2009). *The elements of statistical learning: data mining, inference, and prediction *(2. Baskı, ss. 102, 119-120)*.* New York: Springer.
+
+6.  Odds, odd Ratios, probabilities and the logit. (2009, 27 Eylül). https<!-- -->://www.colorado.edu/economics/morey/7818/probtheory/OddsOddRatiosProbabilities.pdf
+
+7.  Çalış, A., Kayapınar, S. & Çetinyokuş, T. (2014). Veri madenciliğinde karar ağacı algoritmaları ile bilgisayar ve internet güvenliği üzerine bir uygulama. *Endüstri Mühendisliği Dergisi*, *25*(3-4), 2-19.
+
+8.  Rokach, L. & Maimon, O. (2014). *Data mining with decision trees: theory and applications* (2. Baskı, ss. 10, 12-13). Singapur: World Scientific.
+
+9.  Lillis, D. (b.t.). *Generalized linear models in R, part 2: understanding model fit in logistic regression output.* https<!-- -->://www.theanalysisfactor.com/r-glm-model-fit/
+
+10. Fawcett, T. (2006, Haziran). An introduction to ROC analysis. *Pattern Recognition Letters*,*27*(8), 861-874.
+
+11. Brodersen, K. H., Ong, C. S., Stephan, K. E. & Buhmann, J. M. (2010). The balanced accuracy and its posterior distribution. *Proceedings of the 20th International Conference on Pattern Recognition.*
+
+
+
+
+
